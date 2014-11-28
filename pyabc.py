@@ -80,7 +80,20 @@ for line in information_field_table.split('\n'):
     info_keys[key] = InfoKey(key, *fields)
 
 
+# map natural note letters to chromatic values 
+notes_values = {'A': 0, 'B': 2, 'C': 3, 'D': 5, 'E': 7, 'F': 8, 'G', 10}
+accidental_values = {'': 0, '#': 1, 'b': -1}
 
+# map mode names relative to Ionian (in chromatic steps)
+mode_values = {'major': 0, 'minor': 3, 'ionian': 0, 'aeolian': 3, 
+               'mixolydian': -7, 'dorian': -2, 'phrygian': -4, 'lydian': -5, 
+               'locrian': 1}
+
+# sharps/flats in ionian keys
+key_sig = {'C#': 7, 'F#': 6, 'B': 5, 'E': 4, 'A': 3, 'D': 2, 'G': 1, 'C': 0,
+           'F': -1, 'Bb': -2, 'Eb': -3, 'Ab': -4, 'Db': -5, 'Gb': -6, 'Cb': -7}
+sharp_order = "FCGDAEB"
+flat_order = "BEADGCF"
 
 
 
@@ -121,10 +134,56 @@ class Tune(object):
         self.title = h['tune title']
         self.key = h['key']
             
-        
     def parse_tune(self, tune):
-        self.tune = tune
-
+        meter = self.header.get('meter', 'free')
+        unit = self.header.get('unit note length', None)
+        # determine default unit note length from meter if possible
+        if unit is None and meter != 'free':
+            if eval(meter) < 0.75:
+                unit = "1/16"
+            else:
+                unit = "1/8"
+        key = self.header['key']
+        accidentals = self.parse_key(key)
+        
+        tokens = []
+        for line in tune:
+            tok = self.tokenize(line)
+            
+    def parse_key(self, key):
+        """
+        Return dictionary of accidentals that should be displayed in the key
+        signature for the given key description.
+        """
+        # highland pipe keys
+        if key in ['HP', 'Hp']:
+            return {'F': 1, 'C': 1, 'G': 0}
+        
+        base, acc, mode, extra = re.match(r'([A-G])(\#|b)?\s+(\w+)?(.*)', key).groups()
+        if mode == '':
+            mode = 'major'
+            
+        # determine number of sharps/flats for this key by first converting
+        # to ionian, then doing the key lookup
+        key = self.relative_ionian(base+acc, mode)
+        num_acc = key_sig[key]
+        
+        sig = {}
+        value = 1 if num_acc > 0 else -1  # sharps or flats?
+        for i in range(num_acc):
+            sig[sharp_order[i]] = value  # set each note in the signature
+        return sig
+    
+    def relative_ionian(self, key, mode):
+        """
+        Return the ionian mode relative to the given key and mode.
+        """
+        
+            
+    def tokenize(self, line):
+        pass
+        
+        
 
 if __name__ == '__main__':
     t = Tune(tunes[0])
