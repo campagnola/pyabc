@@ -30,6 +30,8 @@ edB dBA G2D|GAB dge dBA|edB dBA G2A|BAG FAG FED:|
 
 # Information field table copied from
 # http://abcnotation.com/wiki/abc:standard:v2.1#abc_files_tunes_and_fragments
+# Columns are:
+# X:Field, file header, tune header, tune body, inline, type
 information_field_table = """
 A:area              yes     yes     no      no      string
 B:book              yes     yes     no      no      string
@@ -79,15 +81,30 @@ for line in information_field_table.split('\n'):
     fields = re.match(r'(.*)\s+(yes|no)\s+(yes|no)\s+(yes|no)\s+(yes|no)\s+(.*)', line[2:]).groups()
     info_keys[key] = InfoKey(key, *fields)
 
+file_header_fields = {k:v for k,v in info_keys.items() if v.file_header}
+tune_header_fields = {k:v for k,v in info_keys.items() if v.tune_header}
+tune_body_fields = {k:v for k,v in info_keys.items() if v.tune_body}
+inline_fields = {k:v for k,v in info_keys.items() if v.inline}
+
+
 
 # map natural note letters to chromatic values 
-notes_values = {'A': 0, 'B': 2, 'C': 3, 'D': 5, 'E': 7, 'F': 8, 'G', 10}
+notes_values = {'A': 0, 'B': 2, 'C': 3, 'D': 5, 'E': 7, 'F': 8, 'G': 10}
 accidental_values = {'': 0, '#': 1, 'b': -1}
+for n,v in list(notes_values.items()):
+    for a in '#b':
+        notes_values[n+a] = v + accidental_values[a]
+
+# map chromatic number back to most common key names
+chromatic_notes = ['A', 'Bb', 'B', 'C', 'C#', 'D', 'Eb', 'E', 'F', 'F#', 'G', 'Ab']
 
 # map mode names relative to Ionian (in chromatic steps)
 mode_values = {'major': 0, 'minor': 3, 'ionian': 0, 'aeolian': 3, 
                'mixolydian': -7, 'dorian': -2, 'phrygian': -4, 'lydian': -5, 
                'locrian': 1}
+
+# mode name normalization
+mode_abbrev = {m[:3]: m for m in mode_values}
 
 # sharps/flats in ionian keys
 key_sig = {'C#': 7, 'F#': 6, 'B': 5, 'E': 4, 'A': 3, 'D': 2, 'G': 1, 'C': 0,
@@ -95,6 +112,141 @@ key_sig = {'C#': 7, 'F#': 6, 'B': 5, 'E': 4, 'A': 3, 'D': 2, 'G': 1, 'C': 0,
 sharp_order = "FCGDAEB"
 flat_order = "BEADGCF"
 
+
+# Decoration symbols from
+# http://abcnotation.com/wiki/abc:standard:v2.1#decorations
+symbols = """
+!trill!                "tr" (trill mark)
+!trill(!               start of an extended trill
+!trill)!               end of an extended trill
+!lowermordent!         short /|/|/ squiggle with a vertical line through it
+!uppermordent!         short /|/|/ squiggle
+!mordent!              same as !lowermordent!
+!pralltriller!         same as !uppermordent!
+!roll!                 a roll mark (arc) as used in Irish music
+!turn!                 a turn mark (also known as gruppetto)
+!turnx!                a turn mark with a line through it
+!invertedturn!         an inverted turn mark
+!invertedturnx!        an inverted turn mark with a line through it
+!arpeggio!             vertical squiggle
+!>!                    > mark
+!accent!               same as !>!
+!emphasis!             same as !>!
+!fermata!              fermata or hold (arc above dot)
+!invertedfermata!      upside down fermata
+!tenuto!               horizontal line to indicate holding note for full duration
+!0! - !5!              fingerings
+!+!                    left-hand pizzicato, or rasp for French horns
+!plus!                 same as !+!
+!snap!                 snap-pizzicato mark, visually similar to !thumb!
+!slide!                slide up to a note, visually similar to a half slur
+!wedge!                small filled-in wedge mark
+!upbow!                V mark
+!downbow!              squared n mark
+!open!                 small circle above note indicating open string or harmonic
+!thumb!                cello thumb symbol
+!breath!               a breath mark (apostrophe-like) after note
+!pppp! !ppp! !pp! !p!  dynamics marks
+!mp! !mf! !f! !ff!     more dynamics marks
+!fff! !ffff! !sfz!     more dynamics marks
+!crescendo(!           start of a < crescendo mark
+!<(!                   same as !crescendo(!
+!crescendo)!           end of a < crescendo mark, placed after the last note
+!<)!                   same as !crescendo)!
+!diminuendo(!          start of a > diminuendo mark
+!>(!                   same as !diminuendo(!
+!diminuendo)!          end of a > diminuendo mark, placed after the last note
+!>)!                   same as !diminuendo)!
+!segno!                2 ornate s-like symbols separated by a diagonal line
+!coda!                 a ring with a cross in it
+!D.S.!                 the letters D.S. (=Da Segno)
+!D.C.!                 the letters D.C. (=either Da Coda or Da Capo)
+!dacoda!               the word "Da" followed by a Coda sign
+!dacapo!               the words "Da Capo"
+!fine!                 the word "fine"
+!shortphrase!          vertical line on the upper part of the staff
+!mediumphrase!         same, but extending down to the centre line
+!longphrase!           same, but extending 3/4 of the way down
+"""
+
+
+
+class Token(object):
+    def __init__(self, line, char, text):
+        self._line = line
+        self._char = char
+        self._text = text
+
+    def __repr__(self):
+        return "<%s \"%s\">" % (self.__class__.__name__, self._text)
+
+
+class Note(Token):
+    def __init__(self, note, accidental, octave, num, denom, **kwds):
+        Token.__init__(self, **kwds)
+        self.note = note
+        self.accidental = accidental
+        self.octave = octave
+        self.length = (num, denom)
+        
+class Beam(Token):
+    pass
+
+class Space(Token):
+    pass
+
+class Slur(Token):
+    """   ( or )   """
+    pass
+
+class Newline(Token):
+    pass
+
+class Continuation(Token):
+    """  \ at end of line  """
+    pass
+
+class GracenoteBrace(Token):
+    """  {  {/  or }  """
+    pass
+
+class ChordBracket(Token):
+    """  [  or  ]  """
+    pass
+
+class ChordSymbol(Token):
+    """   "Amaj"   """
+    pass
+
+class Annotation(Token):
+    """    "<stuff"   """
+    pass
+
+
+class Decoration(Token):
+    """  .~HLMOPSTuv  """
+    pass
+
+class Tuplet(Token):
+    """  (5   """
+    def __init__(self, num, **kwds):
+        Token.__init__(self, **kwds)
+        self.num = num
+
+class BodyField(Token):
+    pass
+
+class InlineField(Token):
+    pass
+
+class Rest(Token):
+    def __init__(self, char, num, denom, **kwds):
+        # char==X or Z means length is in measures
+        Token.__init__(self, **kwds)
+        self.char = char
+        self.length = (num, denom)
+        
+    
 
 
 class Tune(object):
@@ -118,6 +270,8 @@ class Tune(object):
                     header.append(line)
                     if line[0] == 'K':
                         in_tune = True
+                elif line[:2] == '+:':
+                    header[-1] += ' ' + line[2:]
                 
         self.parse_header(header)
         self.parse_tune(tune)
@@ -129,7 +283,6 @@ class Tune(object):
             data = line[2:].strip()
             h[info_keys[key].name] = data
         self.header = h
-        print h
         self.reference = h['reference number']
         self.title = h['tune title']
         self.key = h['key']
@@ -146,9 +299,136 @@ class Tune(object):
         key = self.header['key']
         accidentals = self.parse_key(key)
         
+        self.tokens = self.tokenize(tune)
+        
+    def tokenize(self, tune):
         tokens = []
-        for line in tune:
-            tok = self.tokenize(line)
+        for i,line in enumerate(tune):
+            print line
+            line = line.rstrip()
+            
+            if len(line) > 2 and line[1] == ':' and (line[0] == '+' or line[0] in tune_body_fields):
+                tokens.append(BodyField(line=i, char=0, text=line))
+                continue
+            
+            j = 0
+            while j < len(line):
+                part = line[j:]
+
+                # Field
+                if part[0] == '[' and len(part) > 3 and part[2] == ':':
+                    fields = ''.join(inline_fields.keys())
+                    m = re.match('\[[%s]:([^\]]+)\]' % fields, part)
+                    if m is not None:
+                        tokens.append(InlineField(line=i, char=j, text=m.group()))
+                        j += m.end()
+                        continue
+                
+                # Space
+                m = re.match('(\s+)', part)
+                if m is not None:
+                    tokens.append(Space(line=i, char=j, text=m.group()))
+                    j += m.end()
+                    continue
+
+                # Note
+                # Examples:  c  E'  _F2  ^^G,/4  =a,',3/2 
+                m = re.match(r"(\^|\^\^|=|_|__)?([a-gA-G])([,']*)(\d+)?(/(\d+))?", part)
+                if m is not None:
+                    g = m.groups()
+                    octave = 0
+                    if g[2] is not None:
+                        octave -= g[2].count(",")
+                        octave += g[2].count("'")
+                    tokens.append(Note(note=g[1], accidental=g[0], octave=octave, num=g[3], denom=g[5], line=i, char=j, text=m.group()))
+                    j += m.end()
+                    continue
+
+                # Beam  |   :|   |:   ||   and Chord  [ABC]
+                m = re.match('([\[\]\|\:]+)([0-9\-,])?', part)
+                if m is not None:
+                    if m.group() in '[]':
+                        tokens.append(ChordBracket(line=i, char=j, text=m.group()))                        
+                    else:
+                        tokens.append(Beam(line=i, char=j, text=m.group()))
+                    j += m.end()
+                    continue
+
+                # Broken rhythm
+                if isinstance(tokens[-1], (Note, Rest)):
+                    m = re.match('<+|>+', part)
+                    if m is not None:
+                        tokens.append(Dot(line=i, char=j, text=m.group()))
+                        j += m.end()
+                        continue
+
+                # Rest
+                m = re.match('([XZxz])(\d+)?(/(\d+))?', part)
+                if m is not None:
+                    g = m.groups()
+                    tokens.append(Rest(g[0], num=g[1], denom=g[3], line=i, char=j, text=m.group()))
+                    j += m.end()
+                    continue
+                    
+                # Tuplets  (must parse before slur)
+                m = re.match('\(([2-9])', part)
+                if m is not None:
+                    tokens.append(Tuplet(num=m.groups()[0], line=i, char=j, text=m.group()))
+                    j += m.end()
+                    continue
+
+                # Slur
+                if part[0] in '()':
+                    tokens.append(Slur(line=i, char=j, text=part[0]))
+                    j += 1
+                    continue
+
+                # Embelishments
+                m = re.match('(\{\\?)|\}', part)
+                if m is not None:
+                    tokens.append(GracenoteBrace(line=i, char=j, text=m.group()))
+                    j += m.end()
+                    continue
+                
+                # Decorations (single character)
+                if part[0] in '.~HLMOPSTuv':
+                    tokens.append(Decoration(line=i, char=j, text=part[0]))
+                    j += 1
+                    continue
+                
+                # Decorations (!symbol!)
+                m = re.match('\!([^\! ]+)\!', part)
+                if m is not None:
+                    tokens.append(Decoration(line=i, char=j, text=m.group()))
+                    j += m.end()
+                    continue
+                
+                # Continuation
+                if j == len(line) - 1 and j == '\\':
+                    tokens.append(Continuation(line=i, char=j, text='\\'))
+                    j += 1
+                    continue
+                
+                # Annotation
+                m = re.match('"[\^\_\<\>\@][^"]+"', part)
+                if m is not None:
+                    tokens.append(Annotation(line=i, char=j, text=m.group()))
+                    j += m.end()
+                    continue
+
+                # Chord symbol
+                m = re.match('"[\w]+"', part)
+                if m is not None:
+                    tokens.append(ChordSymbol(line=i, char=j, text=m.group()))
+                    j += m.end()
+                    continue
+                
+                raise Exception("Unable to parse: %s" % part)
+                
+            if not isinstance(tokens[-1], Continuation):
+                tokens.append(Newline(line=i, char=j, text='\n'))
+                
+        return tokens
             
     def parse_key(self, key):
         """
@@ -159,9 +439,15 @@ class Tune(object):
         if key in ['HP', 'Hp']:
             return {'F': 1, 'C': 1, 'G': 0}
         
-        base, acc, mode, extra = re.match(r'([A-G])(\#|b)?\s+(\w+)?(.*)', key).groups()
-        if mode == '':
+        base, acc, mode, extra = re.match(r'([A-G])(\#|b)?\s*(\w+)?(.*)', key).groups()
+        if acc is None:
+            acc = ''
+        if mode is None:
             mode = 'major'
+        try:
+            mode = mode_abbrev[mode[:3].lower()]
+        except KeyError:
+            raise ValueError("Unrecognized key signature %s" % key)
             
         # determine number of sharps/flats for this key by first converting
         # to ionian, then doing the key lookup
@@ -178,12 +464,11 @@ class Tune(object):
         """
         Return the ionian mode relative to the given key and mode.
         """
-        
-            
-    def tokenize(self, line):
-        pass
-        
+        rel = mode_values[mode]
+        return chromatic_notes[(notes_values[key] + rel) % 12]
         
 
 if __name__ == '__main__':
-    t = Tune(tunes[0])
+    tune = Tune(tunes[0])
+    
+    print("Header: %s" % tune.header)
