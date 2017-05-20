@@ -113,6 +113,119 @@ sharp_order = "FCGDAEB"
 flat_order = "BEADGCF"
 
 
+class Key(object):
+    def __init__(self, name=None, root=None, mode=None):
+        if name is not None:
+            self.root, self.mode = self.parse_key(name)
+            assert root is None and mode is None
+        else:
+            self.root = Pitch(root)
+            self.mode = mode
+            
+        
+    def parse_key(self, key):
+        # highland pipe keys
+        if key in ['HP', 'Hp']:
+            return {'F': 1, 'C': 1, 'G': 0}
+        
+        base, acc, mode, extra = re.match(r'([A-G])(\#|b)?\s*(\w+)?(.*)', key).groups()
+        if acc is None:
+            acc = ''
+        if mode is None:
+            mode = 'major'
+        try:
+            mode = mode_abbrev[mode[:3].lower()]
+        except KeyError:
+            raise ValueError("Unrecognized key signature %s" % key)
+        
+        return Pitch(base+acc), mode
+            
+    @property
+    def accidentals(self):
+        """
+        List of accidentals that should be displayed in the key
+        signature for the given key description.
+        """
+        # determine number of sharps/flats for this key by first converting
+        # to ionian, then doing the key lookup
+        key = self.relative_ionian
+        num_acc = key_sig[key.root.name]
+        
+        sig = []
+        # sharps or flats?
+        if num_acc > 0:
+            for i in range(num_acc):
+                sig.append(sharp_order[i] + '#')
+        else:
+            for i in range(-num_acc):
+                sig.append(flat_order[i] + 'b')
+        
+        return sig
+    
+    @property
+    def relative_ionian(self):
+        """
+        Return the ionian mode relative to the given key and mode.
+        """
+        key, mode = self.root, self.mode
+        rel = mode_values[mode]
+        return Key(root=(key.value + rel) % 12, mode='ionian')
+    
+    def __repr__(self):
+        return "<Key %s %s>" % (self.root.name, self.mode)
+
+
+class Pitch(object):
+    def __init__(self, value, octave=None):
+        if isinstance(value, Note):
+            self._note = value
+            self._name = value.note
+            self._value = self.pitch_value(value.note)
+            assert octave is None
+            self._octave = value.octave
+        elif isinstance(value, str):
+            self._name = value
+            self._value = self.pitch_value(value)
+            self._octave = octave
+        elif isinstance(value, Pitch):
+            self._name = value._name
+            self._value = value._value
+            self._octave = value._octave
+        else:
+            self._name = None
+            self._value = value  # 0-11
+            self._octave = octave
+
+    def __repr__(self):
+        return "<Pitch %s>" % self.name
+    
+    @property
+    def name(self):
+        if self._name is not None:
+            return self._name
+        return chromatic_notes[self.value]
+        
+    @property
+    def value(self):
+        return self._value
+
+    @staticmethod
+    def pitch_value(pitch, root='A'):
+        """Convert a pitch string like "A#" to a chromatic scale value relative
+        to root.
+        """
+        pitch = pitch.strip()
+        val = notes_values[pitch[0].upper()]
+        if len(pitch) == 2:
+            val += accidental_values[pitch[1]]
+        if root == 'A':
+            return val
+        return (val - Pitch.pitch_value(root)) % 12
+
+    def __eq__(self, a):
+        return self.value == a.value
+    
+
 # Decoration symbols from
 # http://abcnotation.com/wiki/abc:standard:v2.1#decorations
 symbols = """
@@ -182,13 +295,23 @@ class Token(object):
 
 
 class Note(Token):
-    def __init__(self, note, accidental, octave, num, denom, **kwds):
+    def __init__(self, key_sig, note, accidental, octave, num, denom, **kwds):
         Token.__init__(self, **kwds)
+        self.key_sig = key_sig
         self.note = note
         self.accidental = accidental
         self.octave = octave
         self.length = (num, denom)
         
+    @property
+    def pitch(self):
+        """Chromatic note value taking into account key signature and transpositions.
+        """
+        return Pitch(self)
+
+
+
+
 class Beam(Token):
     pass
 
@@ -221,7 +344,6 @@ class ChordSymbol(Token):
 class Annotation(Token):
     """    "<stuff"   """
     pass
-
 
 class Decoration(Token):
     """  .~HLMOPSTuv  """
@@ -296,12 +418,12 @@ class Tune(object):
                 unit = "1/16"
             else:
                 unit = "1/8"
-        key = self.header['key']
-        accidentals = self.parse_key(key)
         
-        self.tokens = self.tokenize(tune)
+        self.tokens = self.tokenize(tune, header)
         
-    def tokenize(self, tune):
+    def tokenize(self, tune, header):
+        key = KeySignature(self.header['key'])
+        
         tokens = []
         for i,line in enumerate(tune):
             print line
@@ -340,7 +462,7 @@ class Tune(object):
                     if g[2] is not None:
                         octave -= g[2].count(",")
                         octave += g[2].count("'")
-                    tokens.append(Note(note=g[1], accidental=g[0], octave=octave, num=g[3], denom=g[5], line=i, char=j, text=m.group()))
+                    tokens.append(Note(key_sig=key, note=g[1], accidental=g[0], octave=octave, num=g[3], denom=g[5], line=i, char=j, text=m.group()))
                     j += m.end()
                     continue
 
@@ -430,45 +552,10 @@ class Tune(object):
                 
         return tokens
             
-    def parse_key(self, key):
-        """
-        Return dictionary of accidentals that should be displayed in the key
-        signature for the given key description.
-        """
-        # highland pipe keys
-        if key in ['HP', 'Hp']:
-            return {'F': 1, 'C': 1, 'G': 0}
-        
-        base, acc, mode, extra = re.match(r'([A-G])(\#|b)?\s*(\w+)?(.*)', key).groups()
-        if acc is None:
-            acc = ''
-        if mode is None:
-            mode = 'major'
-        try:
-            mode = mode_abbrev[mode[:3].lower()]
-        except KeyError:
-            raise ValueError("Unrecognized key signature %s" % key)
-            
-        # determine number of sharps/flats for this key by first converting
-        # to ionian, then doing the key lookup
-        key = self.relative_ionian(base+acc, mode)
-        num_acc = key_sig[key]
-        
-        sig = {}
-        value = 1 if num_acc > 0 else -1  # sharps or flats?
-        for i in range(num_acc):
-            sig[sharp_order[i]] = value  # set each note in the signature
-        return sig
-    
-    def relative_ionian(self, key, mode):
-        """
-        Return the ionian mode relative to the given key and mode.
-        """
-        rel = mode_values[mode]
-        return chromatic_notes[(notes_values[key] + rel) % 12]
         
 
 if __name__ == '__main__':
+    import user
     tune = Tune(tunes[0])
     
     print("Header: %s" % tune.header)
