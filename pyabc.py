@@ -141,7 +141,7 @@ class Key(object):
         return Pitch(base+acc), mode
             
     @property
-    def accidentals(self):
+    def key_signature(self):
         """
         List of accidentals that should be displayed in the key
         signature for the given key description.
@@ -161,6 +161,12 @@ class Key(object):
                 sig.append(flat_order[i] + 'b')
         
         return sig
+
+    @property
+    def accidentals(self):
+        """A dictionary of accidentals in the key signature.
+        """
+        return {p:a for p,a in self.key_signature}
     
     @property
     def relative_ionian(self):
@@ -175,12 +181,22 @@ class Key(object):
         return "<Key %s %s>" % (self.root.name, self.mode)
 
 
+
+
+
 class Pitch(object):
     def __init__(self, value, octave=None):
         if isinstance(value, Note):
             self._note = value
-            self._name = value.note
-            self._value = self.pitch_value(value.note)
+            
+            if len(value.note) == 1:
+                acc = value.key.accidentals.get(value.note[0].upper(), '')
+                self._name = value.note.upper() + acc
+                self._value = self.pitch_value(self._name)
+            else:
+                self._name = value.note.capitalize()
+                self._value = self.pitch_value(value.note)
+            
             assert octave is None
             self._octave = value.octave
         elif isinstance(value, str):
@@ -295,9 +311,9 @@ class Token(object):
 
 
 class Note(Token):
-    def __init__(self, key_sig, note, accidental, octave, num, denom, **kwds):
+    def __init__(self, key, note, accidental, octave, num, denom, **kwds):
         Token.__init__(self, **kwds)
-        self.key_sig = key_sig
+        self.key = key
         self.note = note
         self.accidental = accidental
         self.octave = octave
@@ -307,7 +323,7 @@ class Note(Token):
     def pitch(self):
         """Chromatic note value taking into account key signature and transpositions.
         """
-        return Pitch(self)
+        return Pitch(self) 
 
 
 
@@ -419,10 +435,10 @@ class Tune(object):
             else:
                 unit = "1/8"
         
-        self.tokens = self.tokenize(tune, header)
+        self.tokens = self.tokenize(tune, self.header)
         
     def tokenize(self, tune, header):
-        key = KeySignature(self.header['key'])
+        key = Key(self.header['key'])
         
         tokens = []
         for i,line in enumerate(tune):
@@ -462,7 +478,7 @@ class Tune(object):
                     if g[2] is not None:
                         octave -= g[2].count(",")
                         octave += g[2].count("'")
-                    tokens.append(Note(key_sig=key, note=g[1], accidental=g[0], octave=octave, num=g[3], denom=g[5], line=i, char=j, text=m.group()))
+                    tokens.append(Note(key=key, note=g[1], accidental=g[0], octave=octave, num=g[3], denom=g[5], line=i, char=j, text=m.group()))
                     j += m.end()
                     continue
 
