@@ -347,6 +347,9 @@ class Note(Token):
         n,d = self._length
         return (int(n) if n is not None else 1, int(d) if d is not None else 1)
 
+    @property
+    def duration(self):
+        return self.length[0] / self.length[1]
 
 class Beam(Token):
     pass
@@ -597,6 +600,12 @@ class Tune(object):
                 
         return tokens
             
+    def pitchogram(tune):
+        hist = {}
+        for note in tune.notes:
+            v = note.pitch.abs_value
+            hist[v] = hist.get(v, 0) + note.duration
+        return hist
         
 
 if __name__ == '__main__':
@@ -623,6 +632,15 @@ if __name__ == '__main__':
             elif isinstance(token, Note):
                 tvals.append(t)
                 yvals.append(token.pitch.abs_value)
-                t += token.length[0] / token.length[1]
+                t += token.duration
         plt.plot(tvals, yvals, pen=None, symbol='o')
         
+        
+        hist = tune.pitchogram()
+        k = sorted(hist.keys())
+        v = [hist[x] for x in k]
+        plt = pg.plot()
+        bar = pg.BarGraphItem(x=k, height=v, width=1)
+        plt.addItem(bar)
+        
+        plt.getAxis('bottom').setTicks([[(0, 'C'), (2, 'D')]])
