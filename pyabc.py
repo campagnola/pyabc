@@ -91,11 +91,11 @@ inline_fields = {k:v for k,v in info_keys.items() if v.inline}
 
 
 # map natural note letters to chromatic values 
-notes_values = {'C': 0, 'D': 2, 'E': 4, 'F': 5, 'G': 7, 'A': 9, 'B': 11, }
+pitch_values = {'C': 0, 'D': 2, 'E': 4, 'F': 5, 'G': 7, 'A': 9, 'B': 11, }
 accidental_values = {'': 0, '#': 1, 'b': -1}
-for n,v in list(notes_values.items()):
+for n,v in list(pitch_values.items()):
     for a in '#b':
-        notes_values[n+a] = v + accidental_values[a]
+        pitch_values[n+a] = v + accidental_values[a]
 
 # map chromatic number back to most common key names
 chromatic_notes = ['C', 'C#', 'D', 'Eb', 'E', 'F', 'F#', 'G', 'Ab', 'A', 'Bb', 'B']
@@ -237,7 +237,7 @@ class Pitch(object):
         to root.
         """
         pitch = pitch.strip()
-        val = notes_values[pitch[0].upper()]
+        val = pitch_values[pitch[0].upper()]
         if len(pitch) == 2:
             val += accidental_values[pitch[1]]
         if root == 'C':
@@ -406,14 +406,44 @@ class Rest(Token):
         Token.__init__(self, **kwds)
         self.char = char
         self.length = (num, denom)
-        
-    
+            
+
+class InfoContext(object):
+    """Keeps track of current information fields
+    """
+    def __init__(self, fields):
+        self._fields = fields
+
+    def __getattr__(self, field):
+        return self._fields.get(field, None)
+
+    def copy(self, fields):
+        """Return a copy with some fields updated
+        """
+        f2 = InfoContext(self._fields)
+        f2._fields.update(fields)
+        return f2
 
 
 class Tune(object):
-    def __init__(self, abc):
-        self.parse_abc(abc)
-        
+    """Initialize with either an ABC string or a json-parsed dict read from
+    the TheSession API.
+    """
+    def __init__(self, abc=None, json=None):
+        if abc is not None:
+            self.parse_abc(abc)
+        elif json is not None:
+            self.parse_json(json)
+        else:
+            raise TypeError("must provide abc or json")
+    
+    @property
+    def url(self):
+        try:
+            return "http://thesession.org/tunes/%d#setting%d" % (self.header['reference number'], self.header['setting'])
+        except KeyError:
+            return None
+
     @property
     def notes(self):
         return [t for t in self.tokens if isinstance(t, Note)]
@@ -440,7 +470,18 @@ class Tune(object):
                 
         self.parse_header(header)
         self.parse_tune(tune)
-        
+
+    def parse_json(self, json):
+        self.header = {
+            "reference number": json['tune'],
+            "setting": json['setting'],
+            "tune title": json['name'],
+            "meter": json['meter'],
+            "unit note length": "1/" + json['meter'].split('/')[1],
+            "key": json['mode'],
+        }
+        self.parse_tune(json['abc'].split('\r\n'))
+
     def parse_header(self, header):
         h = {}
         for line in header:
@@ -474,7 +515,7 @@ class Tune(object):
         
         tokens = []
         for i,line in enumerate(tune):
-            print line
+            print(line)
             line = line.rstrip()
             
             if len(line) > 2 and line[1] == ':' and (line[0] == '+' or line[0] in tune_body_fields):
@@ -503,14 +544,24 @@ class Tune(object):
 
                 # Note
                 # Examples:  c  E'  _F2  ^^G,/4  =a,',3/2 
-                m = re.match(r"(\^|\^\^|=|_|__)?([a-gA-G])([,']*)(\d+)?(/(\d+))?", part)
+                m = re.match(r"(?P<acc>\^|\^\^|=|_|__)?(?P<note>[a-gA-G])(?P<oct>[,']*)(?P<num>\d+)?(?P<slash>/+)?(?P<den>\d+)?", part)
                 if m is not None:
-                    g = m.groups()
-                    octave = int(g[1].islower())
-                    if g[2] is not None:
-                        octave -= g[2].count(",")
-                        octave += g[2].count("'")
-                    tokens.append(Note(key=key, time=time_sig, note=g[1], accidental=g[0], octave=octave, num=g[3], denom=g[5], line=i, char=j, text=m.group()))
+                    g = m.groupdict()
+                    octave = int(g['note'].islower())
+                    if g['oct'] is not None:
+                        octave -= g['oct'].count(",")
+                        octave += g['oct'].count("'")
+
+                    num = g.get('num', 1)
+                    if g['den'] is not None:
+                        denom = g['den']
+                    elif g['slash'] is not None:
+                        denom = 2 * g['slash'].count('/')
+                    else:
+                        denom = 1
+
+                    tokens.append(Note(key=key, time=time_sig, note=g['note'], accidental=g['acc'], 
+                        octave=octave, num=num, denom=denom, line=i, char=j, text=m.group()))
                     j += m.end()
                     continue
 
@@ -593,7 +644,7 @@ class Tune(object):
                     j += m.end()
                     continue
                 
-                raise Exception("Unable to parse: %s" % part)
+                raise Exception("Unable to parse: %s\n%s" % (part, self.url))
                 
             if not isinstance(tokens[-1], Continuation):
                 tokens.append(Newline(line=i, char=j, text='\n'))
@@ -608,9 +659,23 @@ class Tune(object):
         return hist
         
 
+def get_thesession_tunes():
+    import os, json
+    if not os.path.isfile("tunes.json"):
+        import sys, urllib
+        url = 'https://raw.githubusercontent.com/adactio/TheSession-data/master/json/tunes.json'
+        print("Downloading tunes database from %s..." % url)
+        try:
+            urllib.urlretrieve(url, 'tunes.json')
+        except AttributeError:
+            import urllib.request
+            urllib.request.urlretrieve(url, 'tunes.json')
+    return json.loads(open('tunes.json', 'rb').read().decode('utf8'))
+
+
 if __name__ == '__main__':
-    import user
-    tune = Tune(tunes[0])
+    ts_tunes = get_thesession_tunes()
+    tune = Tune(json=ts_tunes[0])
     
     print("Header: %s" % tune.header)
 
@@ -622,6 +687,13 @@ if __name__ == '__main__':
         plt.addLine(y=12)
         plt.addLine(x=0)
         
+        ticks = []
+        for i in (0, 1):
+            for pitch in "CDEFGAB":
+                ticks.append((i*12 + pitch_values[pitch], pitch))
+
+        plt.getAxis('left').setTicks([ticks])
+
         tvals = []
         yvals = []
         
@@ -643,4 +715,4 @@ if __name__ == '__main__':
         bar = pg.BarGraphItem(x=k, height=v, width=1)
         plt.addItem(bar)
         
-        plt.getAxis('bottom').setTicks([[(0, 'C'), (2, 'D')]])
+        plt.getAxis('bottom').setTicks([ticks])
