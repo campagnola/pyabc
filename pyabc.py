@@ -1,4 +1,6 @@
+from __future__ import division
 import re
+
 
 
 # Just some tunes to test against
@@ -89,14 +91,14 @@ inline_fields = {k:v for k,v in info_keys.items() if v.inline}
 
 
 # map natural note letters to chromatic values 
-notes_values = {'A': 0, 'B': 2, 'C': 3, 'D': 5, 'E': 7, 'F': 8, 'G': 10}
+notes_values = {'C': 0, 'D': 2, 'E': 4, 'F': 5, 'G': 7, 'A': 9, 'B': 11, }
 accidental_values = {'': 0, '#': 1, 'b': -1}
 for n,v in list(notes_values.items()):
     for a in '#b':
         notes_values[n+a] = v + accidental_values[a]
 
 # map chromatic number back to most common key names
-chromatic_notes = ['A', 'Bb', 'B', 'C', 'C#', 'D', 'Eb', 'E', 'F', 'F#', 'G', 'Ab']
+chromatic_notes = ['C', 'C#', 'D', 'Eb', 'E', 'F', 'F#', 'G', 'Ab', 'A', 'Bb', 'B']
 
 # map mode names relative to Ionian (in chromatic steps)
 mode_values = {'major': 0, 'minor': 3, 'ionian': 0, 'aeolian': 3, 
@@ -122,7 +124,6 @@ class Key(object):
             self.root = Pitch(root)
             self.mode = mode
             
-        
     def parse_key(self, key):
         # highland pipe keys
         if key in ['HP', 'Hp']:
@@ -181,9 +182,6 @@ class Key(object):
         return "<Key %s %s>" % (self.root.name, self.mode)
 
 
-
-
-
 class Pitch(object):
     def __init__(self, value, octave=None):
         if isinstance(value, Note):
@@ -225,8 +223,16 @@ class Pitch(object):
     def value(self):
         return self._value
 
+    @property
+    def octave(self):
+        return self._octave
+
+    @property
+    def abs_value(self):
+        return self.value + self.octave * 12
+
     @staticmethod
-    def pitch_value(pitch, root='A'):
+    def pitch_value(pitch, root='C'):
         """Convert a pitch string like "A#" to a chromatic scale value relative
         to root.
         """
@@ -234,13 +240,23 @@ class Pitch(object):
         val = notes_values[pitch[0].upper()]
         if len(pitch) == 2:
             val += accidental_values[pitch[1]]
-        if root == 'A':
+        if root == 'C':
             return val
         return (val - Pitch.pitch_value(root)) % 12
 
     def __eq__(self, a):
         return self.value == a.value
     
+
+class TimeSignature(object):
+    def __init__(self, meter, unit_len, tempo=None):
+        self._meter = [int(x) for x in meter.split('/')]
+        self._unit_len = [int(x) for x in unit_len.split('/')]
+        self._tempo = tempo
+
+    def __repr__(self):
+        return "<TimeSignature %d/%d>" % tuple(self._meter)
+
 
 # Decoration symbols from
 # http://abcnotation.com/wiki/abc:standard:v2.1#decorations
@@ -311,13 +327,14 @@ class Token(object):
 
 
 class Note(Token):
-    def __init__(self, key, note, accidental, octave, num, denom, **kwds):
+    def __init__(self, key, time, note, accidental, octave, num, denom, **kwds):
         Token.__init__(self, **kwds)
         self.key = key
+        self.time_sig = time
         self.note = note
         self.accidental = accidental
         self.octave = octave
-        self.length = (num, denom)
+        self._length = (num, denom)
         
     @property
     def pitch(self):
@@ -325,7 +342,10 @@ class Note(Token):
         """
         return Pitch(self) 
 
-
+    @property
+    def length(self):
+        n,d = self._length
+        return (int(n) if n is not None else 1, int(d) if d is not None else 1)
 
 
 class Beam(Token):
@@ -391,6 +411,10 @@ class Tune(object):
     def __init__(self, abc):
         self.parse_abc(abc)
         
+    @property
+    def notes(self):
+        return [t for t in self.tokens if isinstance(t, Note)]
+        
     def parse_abc(self, abc):
         self.abc = abc
         header = []
@@ -426,6 +450,13 @@ class Tune(object):
         self.key = h['key']
             
     def parse_tune(self, tune):
+        self.tokens = self.tokenize(tune, self.header)
+        
+    def tokenize(self, tune, header):
+        # get initial key signature from header
+        key = Key(self.header['key'])
+
+        # get initial time signature from header
         meter = self.header.get('meter', 'free')
         unit = self.header.get('unit note length', None)
         # determine default unit note length from meter if possible
@@ -434,11 +465,9 @@ class Tune(object):
                 unit = "1/16"
             else:
                 unit = "1/8"
-        
-        self.tokens = self.tokenize(tune, self.header)
-        
-    def tokenize(self, tune, header):
-        key = Key(self.header['key'])
+        tempo = self.header.get('tempo', None)
+        time_sig = TimeSignature(meter, unit, tempo)
+
         
         tokens = []
         for i,line in enumerate(tune):
@@ -474,11 +503,11 @@ class Tune(object):
                 m = re.match(r"(\^|\^\^|=|_|__)?([a-gA-G])([,']*)(\d+)?(/(\d+))?", part)
                 if m is not None:
                     g = m.groups()
-                    octave = 0
+                    octave = int(g[1].islower())
                     if g[2] is not None:
                         octave -= g[2].count(",")
                         octave += g[2].count("'")
-                    tokens.append(Note(key=key, note=g[1], accidental=g[0], octave=octave, num=g[3], denom=g[5], line=i, char=j, text=m.group()))
+                    tokens.append(Note(key=key, time=time_sig, note=g[1], accidental=g[0], octave=octave, num=g[3], denom=g[5], line=i, char=j, text=m.group()))
                     j += m.end()
                     continue
 
@@ -575,3 +604,25 @@ if __name__ == '__main__':
     tune = Tune(tunes[0])
     
     print("Header: %s" % tune.header)
+
+
+    def show(tune):
+        import pyqtgraph as pg
+        plt = pg.plot()
+        plt.addLine(y=0)
+        plt.addLine(y=12)
+        plt.addLine(x=0)
+        
+        tvals = []
+        yvals = []
+        
+        t = 0
+        for token in tune.tokens:
+            if isinstance(token, Beam):
+                plt.addLine(x=t)
+            elif isinstance(token, Note):
+                tvals.append(t)
+                yvals.append(token.pitch.abs_value)
+                t += token.length[0] / token.length[1]
+        plt.plot(tvals, yvals, pen=None, symbol='o')
+        
