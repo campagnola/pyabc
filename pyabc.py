@@ -380,6 +380,10 @@ class Slur(Token):
     """   ( or )   """
     pass
 
+class Tie(Token):
+    """   -   """
+    pass
+
 class Newline(Token):
     pass
 
@@ -632,6 +636,12 @@ class Tune(object):
                 # Slur
                 if part[0] in '()':
                     tokens.append(Slur(line=i, char=j, text=part[0]))
+                    j += 1
+                    continue
+
+                # Tie
+                if part[0] == '-':
+                    tokens.append(Tie(line=i, char=j, text=part[0]))
                     j += 1
                     continue
 
