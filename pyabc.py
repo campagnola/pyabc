@@ -669,7 +669,7 @@ class Tune(object):
                     continue
 
                 # Chord symbol
-                m = re.match(r'"[\w]+"', part)
+                m = re.match(r'"[\w#/]+"', part)
                 if m is not None:
                     tokens.append(ChordSymbol(line=i, char=j, text=m.group()))
                     j += m.end()
