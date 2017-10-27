@@ -351,6 +351,25 @@ class Note(Token):
     def duration(self):
         return self.length[0] / self.length[1]
 
+    def dotify(self, dots, direction):
+        """Apply dot(s) to the duration of this note.
+        """
+        assert direction in ('left', 'right')
+        longer = direction == 'left'
+        if '<' in dots:
+            longer = not longer
+        n_dots = len(dots)
+        num, den = self.length
+        if longer:
+            num = num * 2 + 1
+            den = den * 2
+            self._length = (num, den)
+        else:
+            den = den * 2
+            self._length = (num, den)
+            
+        
+
 class Beam(Token):
     pass
 
@@ -522,6 +541,7 @@ class Tune(object):
                 tokens.append(BodyField(line=i, char=0, text=line))
                 continue
             
+            pending_dots = None
             j = 0
             while j < len(line):
                 part = line[j:]
@@ -529,14 +549,14 @@ class Tune(object):
                 # Field
                 if part[0] == '[' and len(part) > 3 and part[2] == ':':
                     fields = ''.join(inline_fields.keys())
-                    m = re.match('\[[%s]:([^\]]+)\]' % fields, part)
+                    m = re.match(r'\[[%s]:([^\]]+)\]' % fields, part)
                     if m is not None:
                         tokens.append(InlineField(line=i, char=j, text=m.group()))
                         j += m.end()
                         continue
                 
                 # Space
-                m = re.match('(\s+)', part)
+                m = re.match(r'(\s+)', part)
                 if m is not None:
                     tokens.append(Space(line=i, char=j, text=m.group()))
                     j += m.end()
@@ -562,11 +582,16 @@ class Tune(object):
 
                     tokens.append(Note(key=key, time=time_sig, note=g['note'], accidental=g['acc'], 
                         octave=octave, num=num, denom=denom, line=i, char=j, text=m.group()))
+                    
+                    if pending_dots is not None:
+                        tokens[-1].dotify(pending_dots, 'right')
+                        pending_dots = None
+                    
                     j += m.end()
                     continue
 
                 # Beam  |   :|   |:   ||   and Chord  [ABC]
-                m = re.match('([\[\]\|\:]+)([0-9\-,])?', part)
+                m = re.match(r'([\[\]\|\:]+)([0-9\-,])?', part)
                 if m is not None:
                     if m.group() in '[]':
                         tokens.append(ChordBracket(line=i, char=j, text=m.group()))                        
@@ -576,23 +601,29 @@ class Tune(object):
                     continue
 
                 # Broken rhythm
-                if isinstance(tokens[-1], (Note, Rest)):
+                if len(tokens) > 0 and isinstance(tokens[-1], (Note, Rest)):
                     m = re.match('<+|>+', part)
                     if m is not None:
-                        tokens.append(Dot(line=i, char=j, text=m.group()))
+                        tokens[-1].dotify(part, 'left')
+                        pending_dots = part
                         j += m.end()
                         continue
 
                 # Rest
-                m = re.match('([XZxz])(\d+)?(/(\d+))?', part)
+                m = re.match(r'([XZxz])(\d+)?(/(\d+))?', part)
                 if m is not None:
                     g = m.groups()
                     tokens.append(Rest(g[0], num=g[1], denom=g[3], line=i, char=j, text=m.group()))
+
+                    if pending_dots is not None:
+                        tokens[-1].dotify(pending_dots, 'right')
+                        pending_dots = None
+                    
                     j += m.end()
                     continue
                     
                 # Tuplets  (must parse before slur)
-                m = re.match('\(([2-9])', part)
+                m = re.match(r'\(([2-9])', part)
                 if m is not None:
                     tokens.append(Tuplet(num=m.groups()[0], line=i, char=j, text=m.group()))
                     j += m.end()
@@ -605,7 +636,7 @@ class Tune(object):
                     continue
 
                 # Embelishments
-                m = re.match('(\{\\?)|\}', part)
+                m = re.match(r'(\{\\?)|\}', part)
                 if m is not None:
                     tokens.append(GracenoteBrace(line=i, char=j, text=m.group()))
                     j += m.end()
@@ -618,7 +649,7 @@ class Tune(object):
                     continue
                 
                 # Decorations (!symbol!)
-                m = re.match('\!([^\! ]+)\!', part)
+                m = re.match(r'\!([^\! ]+)\!', part)
                 if m is not None:
                     tokens.append(Decoration(line=i, char=j, text=m.group()))
                     j += m.end()
@@ -631,14 +662,14 @@ class Tune(object):
                     continue
                 
                 # Annotation
-                m = re.match('"[\^\_\<\>\@][^"]+"', part)
+                m = re.match(r'"[\^\_\<\>\@][^"]+"', part)
                 if m is not None:
                     tokens.append(Annotation(line=i, char=j, text=m.group()))
                     j += m.end()
                     continue
 
                 # Chord symbol
-                m = re.match('"[\w]+"', part)
+                m = re.match(r'"[\w]+"', part)
                 if m is not None:
                     tokens.append(ChordSymbol(line=i, char=j, text=m.group()))
                     j += m.end()
