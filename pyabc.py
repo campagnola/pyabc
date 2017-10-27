@@ -706,7 +706,9 @@ def get_thesession_tunes():
 
 if __name__ == '__main__':
     ts_tunes = get_thesession_tunes()
-    tune = Tune(json=ts_tunes[0])
+    for i,t in enumerate(ts_tunes):
+        print("----- %d: %s -----" % (i, t['name']))
+        tune = Tune(json=t)
     
     print("Header: %s" % tune.header)
 
