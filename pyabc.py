@@ -614,7 +614,7 @@ class Tune(object):
                         continue
 
                 # Rest
-                m = re.match(r'([XZxz])(\d+)?(/(\d+))?', part)
+                m = re.match(r'([XZxz])(\d+)?(/(\d+)?)?', part)
                 if m is not None:
                     g = m.groups()
                     tokens.append(Rest(g[0], num=g[1], denom=g[3], line=i, char=j, text=m.group()))
