@@ -576,7 +576,7 @@ class Tune(object):
                     continue
 
                 # Broken rhythm
-                if isinstance(tokens[-1], (Note, Rest)):
+                if tokens and isinstance(tokens[-1], (Note, Rest)):
                     m = re.match('<+|>+', part)
                     if m is not None:
                         tokens.append(Dot(line=i, char=j, text=m.group()))
