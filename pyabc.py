@@ -401,10 +401,10 @@ class InlineField(Token):
     pass
 
 class Rest(Token):
-    def __init__(self, char, num, denom, **kwds):
+    def __init__(self, symbol, num, denom, **kwds):
         # char==X or Z means length is in measures
         Token.__init__(self, **kwds)
-        self.char = char
+        self.symbol = symbol
         self.length = (num, denom)
             
 
