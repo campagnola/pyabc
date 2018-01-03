@@ -555,6 +555,9 @@ class Tune(object):
                     fields = ''.join(inline_fields.keys())
                     m = re.match(r'\[[%s]:([^\]]+)\]' % fields, part)
                     if m is not None:
+                        if m.group()[1] == 'K':
+                            key = Key(m.group()[3:-1])
+
                         tokens.append(InlineField(line=i, char=j, text=m.group()))
                         j += m.end()
                         continue
