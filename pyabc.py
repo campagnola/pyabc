@@ -1,6 +1,8 @@
 from __future__ import division
-import re
+import re, sys
 
+
+str_type = str if sys.version > '3' else basestring
 
 
 # Just some tunes to test against
@@ -129,7 +131,10 @@ class Key(object):
         if key in ['HP', 'Hp']:
             return {'F': 1, 'C': 1, 'G': 0}
         
-        base, acc, mode, extra = re.match(r'([A-G])(\#|b)?\s*(\w+)?(.*)', key).groups()
+        m = re.match(r'([A-G])(\#|b)?\s*(\w+)?(.*)', key)
+        if m is None:
+            raise ValueError('Invalid key "%s"' % key)
+        base, acc, mode, extra = m.groups()
         if acc is None:
             acc = ''
         if mode is None:
@@ -176,7 +181,19 @@ class Key(object):
         """
         key, mode = self.root, self.mode
         rel = mode_values[mode]
-        return Key(root=(key.value + rel) % 12, mode='ionian')
+        root = Pitch((key.value + rel) % 12)
+        
+        # Select flat or sharp to match the current key name
+        if '#' in key.name:
+            root2 = root.equivalent_sharp
+            if len(root2.name) == 2:
+                root = root2
+        elif 'b' in key.name:
+            root2 = root.equivalent_flat
+            if len(root2.name) == 2:
+                root = root2
+        
+        return Key(root=root, mode='ionian')
     
     def __repr__(self):
         return "<Key %s %s>" % (self.root.name, self.mode)
@@ -197,7 +214,7 @@ class Pitch(object):
             
             assert octave is None
             self._octave = value.octave
-        elif isinstance(value, str):
+        elif isinstance(value, str_type):
             self._name = value
             self._value = self.pitch_value(value)
             self._octave = octave
@@ -207,8 +224,12 @@ class Pitch(object):
             self._octave = value._octave
         else:
             self._name = None
-            self._value = value  # 0-11
-            self._octave = octave
+            if octave is None:
+                self._value = value
+                self._octave = octave
+            else:
+                self._value = value % 12
+                self._octave = octave + (value // 12)
 
     def __repr__(self):
         return "<Pitch %s>" % self.name
@@ -217,7 +238,7 @@ class Pitch(object):
     def name(self):
         if self._name is not None:
             return self._name
-        return chromatic_notes[self.value]
+        return chromatic_notes[self.value%12]
         
     @property
     def value(self):
@@ -238,8 +259,8 @@ class Pitch(object):
         """
         pitch = pitch.strip()
         val = pitch_values[pitch[0].upper()]
-        if len(pitch) == 2:
-            val += accidental_values[pitch[1]]
+        for acc in pitch[1:]:
+            val += accidental_values[acc]
         if root == 'C':
             return val
         return (val - Pitch.pitch_value(root)) % 12
@@ -247,6 +268,28 @@ class Pitch(object):
     def __eq__(self, a):
         return self.value == a.value
     
+    @property
+    def equivalent_sharp(self):
+        p = self - 1
+        if len(p.name) == 1:
+            return Pitch(p.name + '#', octave=self.octave)
+        else:
+            return Pitch((self-2).name + '##', octave=self.octave)
+
+    @property
+    def equivalent_flat(self):
+        p = self + 1
+        if len(p.name) == 1:
+            return Pitch(p.name + 'b', octave=self.octave)
+        else:
+            return Pitch((self+2).name + 'bb', octave=self.octave)
+    
+    def __add__(self, x):
+        return Pitch(self.value+x, octave=self.octave)
+
+    def __sub__(self, x):
+        return Pitch(self.value-x, octave=self.octave)
+
 
 class TimeSignature(object):
     def __init__(self, meter, unit_len, tempo=None):
