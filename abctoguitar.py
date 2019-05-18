@@ -9,10 +9,14 @@ parser = argparse.ArgumentParser(
     description="Take and ABC file and render possible guitar tabs")
 parser.add_argument("input", type=str,
                     help="An ABC file to feed to this script.")
-parser.add_argument("--maxfret", "-m",
+parser.add_argument("--maxfret", "-x",
                    type=int,
                    default=5,
                    help="The highest fret to allow use of. Default is 5th.")
+parser.add_argument("--minfret", "-m",
+                    type=int,
+                    default=0,
+                    help="the lowest fret you wish to use. Default is 0.")
 args = parser.parse_args()
 
 # Open input file
@@ -36,8 +40,6 @@ DADGAD = [pyabc.Pitch('D', -1),
           pyabc.Pitch('D', 1)]
 DADGAD.reverse()
 
-MAXFRET = args.maxfret
-
 
 def setup_strings(tuning, maxfret, minfret):
     """
@@ -57,7 +59,6 @@ def setup_strings(tuning, maxfret, minfret):
             Nested dictionaries wit the form:
                 {string: {fret: note_int}}
     """
-    # For each string create a dictionary of {string: {fret: note}}
     strings = {}
     for i, string in enumerate(DADGAD):
         frets = {}
@@ -66,7 +67,7 @@ def setup_strings(tuning, maxfret, minfret):
         strings[i + 1] = frets
     return strings
 
-strings = setup_strings(DADGAD, MAXFRET, 0)
+strings = setup_strings(DADGAD, args.maxfret, args.minfret)
 # Memoize this?
 possible_tabs = []
 for note in tune.tokens:
