@@ -1,0 +1,17 @@
+#!/usr/bin/env python3
+
+import pytest
+
+RAW_TUNE=""""
+X:1
+T:Aaron's Key
+M:6/8
+L:1/8
+Q:120
+R:Jig (Key of Bm)
+K:Bmin
+"Bm"F2B Bcd | "A"c2A ABc | "G"d2B Bcd | "A"edc BAG |
+"Bm"F2B Bcd | "A"c2A ABc | "G"dcd "A"ede |1 "Bm"fdB B2A :|2 "Bm"fdB B2c |:
+"D"~d3 ded | "A"cBA a2g | "Bm"fef ged | "F#m"cec ABc |
+"G"~B3 ~c3 | "F#m"dcd efg | "G"fed "A"cBA |1 "Bm"B3 B2c :|2 "Bm"B3 BAG|]
+"""
