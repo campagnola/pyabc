@@ -9,6 +9,11 @@ parser = argparse.ArgumentParser(
     description="Take and ABC file and render possible guitar tabs")
 parser.add_argument("input", type=str,
                     help="An ABC file to feed to this script.")
+parser.add_argument("--output", "-o",
+                    type=str,
+                    default=None,
+                    help=("Name for output file. If unset will replace *.abc"
+                    " with *.tab"))
 parser.add_argument("--maxfret", "-x",
                    type=int,
                    default=5,
@@ -17,7 +22,18 @@ parser.add_argument("--minfret", "-m",
                     type=int,
                     default=0,
                     help="the lowest fret you wish to use. Default is 0.")
+parser.add_argument("--testmode",
+                    action="store_true",
+                    help="turns on verbose printing out output")
 args = parser.parse_args()
+
+def output_filename(input_filename):
+    # Creates a sensible filename for programme output
+    if not args.output:
+        if input_filename[-4:].lower() == ".abc":
+            return input_filename[:-4] + ".tab"
+        else:
+            return input_filename + ".tab"
 
 # Open input file
 with open(args.input, 'r') as fhandle:
@@ -110,5 +126,14 @@ for line in notation:
 
     str_outs.append(bargroups)
 
+# Finsh off and write a file, if that's what's been asked for.
+final_out = str(np.array(str_outs).T)
+if args.output:
+    with open(args.output, 'w') as fhandle:
+        fhandle.write(final_out)
+else:
+    with open(output_filename(args.input), 'w') as fhandle:
+        fhandle.write(final_out)
 
-print(str(np.array(str_outs).T))
+if args.testmode:
+    print(final_out)
