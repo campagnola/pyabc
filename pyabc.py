@@ -293,7 +293,7 @@ class Pitch(object):
 
 class TimeSignature(object):
     def __init__(self, meter, unit_len, tempo=None):
-        meter = meter.replace('C|', '4/4').replace('C', '4/4')
+        meter = meter.replace('C|', '2/2').replace('C', '4/4')
         self._meter = [int(x) for x in meter.split('/')]
         self._unit_len = [int(x) for x in unit_len.split('/')]
         self._tempo = tempo
