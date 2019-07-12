@@ -139,6 +139,8 @@ class Key(object):
             acc = ''
         if mode is None:
             mode = 'major'
+        if mode is 'm':
+            mode = 'minor'
         try:
             mode = mode_abbrev[mode[:3].lower()]
         except KeyError:
@@ -431,7 +433,7 @@ class Newline(Token):
     pass
 
 class Continuation(Token):
-    """  \ at end of line  """
+    """  \\ at end of line  """
     pass
 
 class GracenoteBrace(Token):
@@ -779,6 +781,7 @@ if __name__ == '__main__':
         ticks = []
         for i in (0, 1):
             for pitch in "CDEFGAB":
+
                 ticks.append((i*12 + pitch_values[pitch], pitch))
 
         plt.getAxis('left').setTicks([ticks])
