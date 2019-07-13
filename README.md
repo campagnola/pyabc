@@ -14,3 +14,12 @@ Basic goals
 * Analyze tunes to determine the modes and keys they use
 * Automatically annotate tunes with chord names
 * From a library of tunes, suggest sets that fit together nicely
+
+
+Testing
+-------
+Limit unit testing has been implemented. To run unit tests
+```bash
+cd /your/pyabc/directory
+PYTHONPATH=$PYTHONPATH:$PWD pytest
+```
