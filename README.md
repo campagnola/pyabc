@@ -16,6 +16,13 @@ Basic goals
 * From a library of tunes, suggest sets that fit together nicely
 
 
+Installation
+------------
+You can install pyabc as a module using
+```bash
+pip install -e /your/py/abc/directory
+```
+
 Testing
 -------
 Limit unit testing has been implemented. To run unit tests
