@@ -139,7 +139,7 @@ class Key(object):
             acc = ''
         if mode is None:
             mode = 'major'
-        if mode is 'm':
+        if mode == 'm':
             mode = 'minor'
         try:
             mode = mode_abbrev[mode[:3].lower()]
