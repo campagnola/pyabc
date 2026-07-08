@@ -695,7 +695,7 @@ class Tune(object):
                     continue
 
                 # Embelishments
-                m = re.match(r'(\{\\?)|\}', part)
+                m = re.match(r'(\{[/\\]?)|\}', part)
                 if m is not None:
                     tokens.append(GracenoteBrace(line=i, char=j, text=m.group()))
                     j += m.end()
