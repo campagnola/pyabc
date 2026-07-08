@@ -133,6 +133,10 @@ class Key(object):
 
         m = re.match(r'([A-G])(\#|b)?\s*(\w+)?(.*)', key)
         if m is None:
+            # retry allowing a lower-case tonic (e.g. "emin")
+            key = key[:1].upper() + key[1:]
+            m = re.match(r'([A-G])(\#|b)?\s*(\w+)?(.*)', key)
+        if m is None:
             raise ValueError('Invalid key "%s"' % key)
         base, acc, mode, extra = m.groups()
         if acc is None:
