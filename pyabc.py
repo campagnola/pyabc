@@ -407,7 +407,7 @@ class Note(Token):
         n_dots = len(dots)
         num, den = self.length
         if longer:
-            num = num * 2 + 1
+            num = num * 3
             den = den * 2
             self._length = (num, den)
         else:
