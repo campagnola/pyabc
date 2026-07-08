@@ -736,7 +736,7 @@ class Tune(object):
 
                 raise Exception("Unable to parse: %s\n%s" % (part, self.url))
 
-            if not isinstance(tokens[-1], Continuation):
+            if tokens and not isinstance(tokens[-1], Continuation):
                 tokens.append(Newline(line=i, char=j, text='\n'))
 
         return tokens
