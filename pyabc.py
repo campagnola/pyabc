@@ -476,6 +476,24 @@ class Rest(Token):
         self.symbol = symbol
         self.length = (num, denom)
 
+    def dotify(self, dots, direction):
+        """Apply dot(s) to the duration of this rest.
+        """
+        assert direction in ('left', 'right')
+        longer = direction == 'left'
+        if '<' in dots:
+            longer = not longer
+        num, den = self.length
+        num = 1 if num is None else int(num)
+        den = 1 if den is None else int(den)
+        if longer:
+            # a dot multiplies the duration by 3/2 (see Note.dotify)
+            num = num * 3
+            den = den * 2
+        else:
+            den = den * 2
+        self.length = (num, den)
+
 
 class InfoContext(object):
     """Keeps track of current information fields
