@@ -715,7 +715,7 @@ class Tune(object):
                     continue
 
                 # Continuation
-                if j == len(line) - 1 and j == '\\':
+                if j == len(line) - 1 and line[j] == '\\':
                     tokens.append(Continuation(line=i, char=j, text='\\'))
                     j += 1
                     continue
