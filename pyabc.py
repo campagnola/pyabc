@@ -95,6 +95,8 @@ inline_fields = {k:v for k,v in info_keys.items() if v.inline}
 # map natural note letters to chromatic values
 pitch_values = {'C': 0, 'D': 2, 'E': 4, 'F': 5, 'G': 7, 'A': 9, 'B': 11, }
 accidental_values = {'': 0, '#': 1, 'b': -1}
+# semitone offset of an accidental written on a note inside the tune body
+note_accidental_values = {'=': 0, '^': 1, '^^': 2, '_': -1, '__': -2}
 for n,v in list(pitch_values.items()):
     for a in '#b':
         pitch_values[n+a] = v + accidental_values[a]
@@ -206,13 +208,17 @@ class Pitch(object):
         if isinstance(value, Note):
             self._note = value
 
-            if len(value.note) == 1:
-                acc = value.key.accidentals.get(value.note[0].upper(), '')
-                self._name = value.note.upper() + acc
-                self._value = self.pitch_value(self._name)
+            # A note's chromatic value is its natural pitch plus one accidental.
+            # An explicit accidental on the note (^ ^^ = _ __) takes priority;
+            # otherwise the key signature supplies the accidental for the letter.
+            letter = value.note.upper()
+            if value.accidental is None:
+                acc = value.key.accidentals.get(letter, '')       # '#', 'b' or ''
+                self._name = letter + acc
+                self._value = pitch_values[letter] + accidental_values[acc]
             else:
                 self._name = value.note.capitalize()
-                self._value = self.pitch_value(value.note)
+                self._value = pitch_values[letter] + note_accidental_values[value.accidental]
 
             assert octave is None
             self._octave = value.octave
