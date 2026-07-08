@@ -584,7 +584,6 @@ class Tune(object):
 
         tokens = []
         for i,line in enumerate(tune):
-            print(line)
             line = line.rstrip()
 
             if len(line) > 2 and line[1] == ':' and (line[0] == '+' or line[0] in tune_body_fields):
