@@ -644,7 +644,7 @@ class Tune(object):
                     continue
 
                 # Beam  |   :|   |:   ||   and Chord  [ABC]
-                m = re.match(r'([\[\]\|\:]+)([0-9\-,])?', part)
+                m = re.match(r'((?:[\]\|\:]|\[(?![A-Za-z]:))+)([0-9\-,])?', part)
                 if m is not None:
                     if m.group() in '[]':
                         tokens.append(ChordBracket(line=i, char=j, text=m.group()))
