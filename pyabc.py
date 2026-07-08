@@ -127,6 +127,7 @@ class Key(object):
             self.mode = mode
 
     def parse_key(self, key):
+        key = key.strip()
         # highland pipe keys
         if key in ['HP', 'Hp']:
             return {'F': 1, 'C': 1, 'G': 0}
